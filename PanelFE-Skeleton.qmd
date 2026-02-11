@@ -1,0 +1,301 @@
+---
+title: "Causality: Panel FE"
+subtitle: "Case Study: Impact of union membership on wages"
+author: Mike Aguilar | https://www.linkedin.com/in/mike-aguilar-econ/ 
+format: html
+editor: visual
+toc: true
+toc-depth: 5
+toc-location: left
+warning: false
+---
+
+# Background
+
+You are attempting to determine the impact of union membership on wages.  
+
+You have data on individuals' wages through time, along with their union membership status, years of experience, and marital status.  
+
+You believe that father's union status is a confounder.  
+
+Q: Explain why this might be a confounder. 
+
+A: 
+
+Q: Suppose you don't have data on father's union status.  What is the problem? How might you address this issue using panel data methods?
+
+A: 
+
+
+# Housekeeping
+
+Task: Load libraries
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls()) # clear workspace
+cat("\014")  # clear console
+library("dplyr")
+library("ggplot2")
+library("tidyverse")
+library("wooldridge")
+library("plm")
+library("broom")
+```
+
+Task: Load in the wagepan dataset from the wooldridge package and take a look at its structure
+```{r}
+data("wagepan", package = "wooldridge")
+wagepan <- as_tibble(wagepan)
+glimpse(wagepan)
+summary(wagepan)
+
+```
+
+# EDA
+
+Task: How many individuals (nr) are in the sample? 
+```{r}
+num_individuals <- wagepan %>%
+  summarise(num_individuals = n_distinct(?)) %>%
+  pull(?)
+num_individuals
+```
+
+Task: For each individual, count how many years they are observed in the sample. What is the min, mean, max of that count? 
+```{r}
+obs_counts <- wagepan %>%
+  group_by(?) %>%
+  summarise(years_observed =?)
+obs_summary <- obs_counts %>%
+  summarise(
+    min_years = ?(years_observed),
+    mean_years = ?(years_observed),
+    max_years = ?(years_observed)
+  )
+obs_summary
+```
+Q: What does this imply about our panel? 
+
+A: 
+
+Task: Provide basic summary stats for lwages, exper, married, and union
+```{r}
+wagepan %>%
+  select(?) %>%
+  summary()
+
+```
+
+
+Task: For each individual, compute the length of time they were married in the sample.  Provide the min, mean, and max of those counts. 
+```{r}
+married_counts <- wagepan %>%
+  group_by(nr) %>%
+  ?(married_years = sum(married))
+married_summary <- married_counts %>%
+  summarise(
+    min_married_years = min(?),
+    mean_married_years = mean(?),
+    max_married_years = max(?)
+  )
+married_summary
+```
+
+Q: Is everyone in the sample married? What does this imply about using married for causal inference? 
+
+A: 
+ 
+
+Task: For each individual, compute the length of time they were in a union in the sample.  Provide the min, mean, and max of those counts. 
+```{r}
+union_counts <- wagepan %>%
+  ?(nr) %>%
+  summarise(union_years = sum(union))
+union_summary <- union_counts %>%
+  ?(
+    min_union_years = min(union_years),
+    mean_union_years = mean(union_years),
+    max_union_years = max(union_years)
+  )
+union_summary
+```
+
+Q: What does this imply about our causal analysis. 
+
+A: 
+
+
+Task: Plot the raw data of lwages vs exper, colored by union status
+```{r}
+ggplot(wagepan, aes(x = ?, y = ?, color = factor
+(union))) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Log wages vs. experience, colored by union status",
+       x = "Experience (exper)",
+       y = "Log of Wages (lwage)",
+       color = "Union membership") +
+  theme_minimal()
+```
+Task: Plot the raw data of lwages vs married, colored by union status
+```{r}
+ggplot(wagepan, aes(x = ?, y = ?, color = factor
+(union))) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  labs(title = "Log wages vs. marital status, colored by union status",
+       x = "Marital status (married)",
+       y = "Log of Wages (lwage)",
+       color = "Union membership") +
+  theme_minimal()
+```
+
+
+Task: Plot average log wages relative to the first year of union membership.  Include a vertical line at 0, which represents the first year of union membership.
+```{r}
+wagepan_event <- wagepan %>%
+  group_by(nr) %>%
+  arrange(year) %>%
+  mutate(
+    switch_year = ifelse(any(diff(union) == 1), year[which(diff(union) == 1)[1] + 1], NA),
+    rel_year = year - switch_year
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(rel_year), abs(rel_year) <= 5)
+
+ggplot(wagepan_event, aes(x = rel_year, y = lwage)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1.1, color = "firebrick") +
+  stat_summary(fun = mean, geom = "point", size = 2, color = "firebrick") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Wages around union entry",
+    subtitle = "0 = first year of union membership",
+    x = "Years relative to union entry",
+    y = "Log wages"
+  ) +
+  theme_minimal()
+
+```
+Q: What does the graphic suggest about our causal analysis? Why is this graphic not sufficient for causal inference?
+
+A: 
+
+
+
+# Pooled OLS
+
+Task: Run a pooled OLS of lwages on union and exper and married
+```{r}
+pooled_ols <- lm(?, data = wagepan)
+summary(pooled_ols)
+```
+
+Q: What is the estimated treatment effect? Interpret. 
+
+A: 
+
+
+Task: Plot the associated regression line 
+```{r}
+ggplot(wagepan, aes(x = ?, y = ?)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Pooled OLS: lwage vs. exper",
+       x = "Experience (exper)",
+       y = "Log of Wages (lwage)") +
+  theme_minimal()
+```
+
+# Panel FE
+
+Task: restructure as a panel dataframe using pdate.frame
+```{r}
+wagepan.panel <- ?(wagepan, index = c(?))
+```
+
+Task: Use pdim to compute dimensions of the panel dataframe. 
+```{r}
+?(wagepan.panel)
+```
+
+
+Task: Run a one way fixed effects regression of lwages on union and exper and married using plm
+```{r}
+fe_model <- ?(?, data = wagepan.panel, model = "within")
+```
+
+
+Task: Use pFtest to compare the pooled OLS and FE models
+```{r}
+pf_test <- ?(?, pooled_ols)
+pf_test
+```
+Q: What does the pFtest tell us about the two models?
+
+A: 
+
+
+
+Task: Use summary to examine the FE model 
+```{r}
+?(fe_model)
+```
+
+Q: What is the estimated treatment effect? 
+
+A: 
+
+
+Task: Show individual trajectories + pooled OLS vs FE slope
+```{r}
+# get coefficients
+pooled_coefs <- coef(pooled_ols)         
+beta_pooled <- pooled_coefs["exper"]
+
+fe_coefs <- coef(fe_model)               
+beta_fe <- fe_coefs["exper"]
+
+# choose x-range for plotting lines
+x_min <- min(wagepan$exper, na.rm = TRUE)
+x_max <- max(wagepan$exper, na.rm = TRUE)
+x_seq <- seq(x_min, x_max, length.out = 100)
+
+# compute intercepts for visualizing the two slopes on the same axes.
+intercept_pooled <- pooled_coefs["(Intercept)"]
+
+# For FE slope we don't have a global intercept (fixed effects absorb it).
+# To show it on the same axis, anchor the FE line to the sample means:
+mean_x <- mean(wagepan$exper, na.rm = TRUE)
+mean_y <- mean(wagepan$lwage, na.rm = TRUE)
+y_fe_line <- mean_y + beta_fe * (x_seq - mean_x)
+
+y_pooled_line <- intercept_pooled + beta_pooled * x_seq
+
+lines_df <- tibble(
+  exper = rep(x_seq, 2),
+  lwage = c(y_pooled_line, y_fe_line),
+  model = rep(c("Pooled OLS", "Within (FE) slope"), each = length(x_seq))
+)
+
+# Make the plot
+tempwagepan<-wagepan %>% filter(nr %in% sample(unique(nr), 20))
+ggplot(tempwagepan, aes(x = exper, y = lwage)) +
+  geom_line(aes(group = nr), color = "grey70", alpha = 0.4, size = 0.4) +
+  geom_point(alpha = 0.5, size = 1) +
+  # add the two model lines from lines_df with clear colors and styles
+  geom_line(data = lines_df, aes(x = exper, y = lwage, color = model, linetype = model),
+            size = 1.1, inherit.aes = FALSE) +
+  scale_color_manual(values = c("Pooled OLS" = "dodgerblue", "Within (FE) slope" = "firebrick")) +
+  scale_linetype_manual(values = c("Pooled OLS" = "solid", "Within (FE) slope" = "dashed")) +
+  labs(title = "Pooled vs. within (FE) slope",
+       subtitle = "Gray lines = individual trajectories; blue = pooled OLS; red dashed = within (FE) slope",
+       x = "Experience (exper)",
+       y = "Log wages (lwage)",
+       color = "", linetype = "") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top") 
+
+```
+Q: Why do the blue and red lines differ? 
+
+A: 
+ 
+
